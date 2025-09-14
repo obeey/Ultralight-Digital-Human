@@ -103,7 +103,9 @@ def train(net, epoch, batch_size, lr):
                 preds = net(imgs, audio_feat)
                 if use_syncnet:
                     y = torch.ones([preds.shape[0],1]).float().to(device)
-                    a, v = syncnet(preds, audio_feat)
+                    # 将音频特征从 (B,16,32,32) 转换为 (B,32,32,32) 以匹配 SyncNet
+                    audio_feat_syncnet = torch.cat([audio_feat, audio_feat], dim=1)  # 重复通道维度
+                    a, v = syncnet(preds, audio_feat_syncnet)
                     sync_loss = cosine_loss(a, v, y)
                 loss_PerceptualLoss = content_loss.get_loss(preds, labels)
                 loss_pixel = criterion(preds, labels)

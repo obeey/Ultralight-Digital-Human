@@ -83,10 +83,17 @@ class Landmark:
     def detect(self, img_path):
         
         img = cv2.imread(img_path)
+        if img is None:
+            raise ValueError(f"Could not read image from {img_path}")
+            
         img_ori = img.copy()
 
         h,w = img_ori.shape[:2]
         cropped_imgs, boxes_list, center_list, alpha_list = face_det(img, self.det_net)
+        
+        if len(cropped_imgs) == 0:
+            raise ValueError(f"No faces detected in image {img_path}")
+            
         cropped = cropped_imgs[0]
         # cv2.imshow("cropped", cropped)
         h,w = cropped.shape[:2]

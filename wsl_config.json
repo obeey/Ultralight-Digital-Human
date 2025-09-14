@@ -1,0 +1,19 @@
+{
+  "deepseek_base_url": "https://api.deepseek.com",
+  "gpt_sovits_path": "../GPT-SoVITS",
+  
+  "output_mode": "udp",
+  "udp_host": "localhost",
+  "udp_port": 1234,
+  "rtmp_url": "rtmp://localhost:1935/live/stream",
+  
+  "http_port": 8080,
+  "http_host": "0.0.0.0",
+  
+  "output_dir": "/mnt/c/temp/stream",
+  
+  "buffer_size": 10,
+  "max_workers": 4,
+  "video_resolution": "1920x1080",
+  "video_fps": 30
+}

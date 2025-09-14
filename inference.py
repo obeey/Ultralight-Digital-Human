@@ -75,21 +75,69 @@ for i in range(audio_feats.shape[0]):
     lms_path = lms_dir + str(img_idx)+'.lms'
     
     img = cv2.imread(img_path)
+    img_h, img_w = img.shape[:2]
+    
     lms_list = []
     with open(lms_path, "r") as f:
         lines = f.read().splitlines()
         for line in lines:
             arr = line.split(" ")
+            if len(arr) != 2:
+                continue
             arr = np.array(arr, dtype=np.float32)
             lms_list.append(arr)
-    lms = np.array(lms_list, dtype=np.int32)  # 这个关键点检测模型之后之后可能会改掉
-    xmin = lms[1][0]
-    ymin = lms[52][1]
-
-    xmax = lms[31][0]
+    
+    if len(lms_list) < 10:
+        print(f"Warning: Insufficient landmarks in {lms_path}: got {len(lms_list)}, skipping frame")
+        continue
+        
+    lms = np.array(lms_list, dtype=np.int32)
+    
+    # 使用与训练时相同的裁剪逻辑
+    all_x = lms[:, 0]
+    all_y = lms[:, 1]
+    
+    xmin = np.min(all_x)
+    xmax = np.max(all_x)
+    ymin = np.min(all_y)
+    ymax = np.max(all_y)
+    
+    # Add some padding and make it square
     width = xmax - xmin
-    ymax = ymin + width
+    height = ymax - ymin
+    size = max(width, height)
+    
+    # Center the crop
+    center_x = (xmin + xmax) // 2
+    center_y = (ymin + ymax) // 2
+    
+    # Add 20% padding
+    size = int(size * 1.2)
+    
+    xmin = center_x - size // 2
+    ymin = center_y - size // 2
+    xmax = xmin + size
+    ymax = ymin + size
+    
+    # Ensure crop coordinates are within image bounds
+    xmin = max(0, xmin)
+    ymin = max(0, ymin)
+    xmax = min(img_w, xmax)
+    ymax = min(img_h, ymax)
+    
+    # Validate crop coordinates
+    width = xmax - xmin
+    height = ymax - ymin
+    if width <= 0 or height <= 0:
+        print(f"Warning: Invalid crop dimensions for frame {i}: width={width}, height={height}, skipping")
+        continue
+    
     crop_img = img[ymin:ymax, xmin:xmax]
+    
+    # Check if crop_img is valid
+    if crop_img.size == 0 or crop_img.shape[0] == 0 or crop_img.shape[1] == 0:
+        print(f"Warning: Empty crop image for frame {i}, skipping")
+        continue
     h, w = crop_img.shape[:2]
     crop_img = cv2.resize(crop_img, (168, 168), cv2.INTER_AREA)
     crop_img_ori = crop_img.copy()

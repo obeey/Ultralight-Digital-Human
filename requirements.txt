@@ -1,0 +1,25 @@
+# 核心依赖
+requests>=2.28.0
+asyncio
+aiohttp>=3.8.0
+
+# 音视频处理
+ffmpeg-python>=0.2.0
+
+# 并发处理
+concurrent.futures
+
+# 日志和配置
+python-dotenv>=0.19.0
+
+# 可选：更高级的文本处理
+nltk>=3.7
+jieba>=0.42.1
+
+# 可选：更好的异步支持
+uvloop>=0.17.0
+
+# 开发依赖
+pytest>=7.0.0
+black>=22.0.0
+flake8>=4.0.0

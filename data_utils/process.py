@@ -49,19 +49,33 @@ def get_landmark(path, landmarks_dir):
     from get_landmark import Landmark
     landmark = Landmark()
     
+    failed_images = []
+    processed_images = 0
+    
     for img_name in os.listdir(full_img_dir):
         if not img_name.endswith(".jpg"):
             continue
         img_path = os.path.join(full_img_dir, img_name)
         lms_path = os.path.join(landmarks_dir, img_name.replace(".jpg", ".lms"))
-        pre_landmark, x1, y1 = landmark.detect(img_path)
-        with open(lms_path, "w") as f:
-            for p in pre_landmark:
-                x, y = p[0]+x1, p[1]+y1
-                f.write(str(x))
-                f.write(" ")
-                f.write(str(y))
-                f.write("\n")
+        
+        try:
+            pre_landmark, x1, y1 = landmark.detect(img_path)
+            with open(lms_path, "w") as f:
+                for p in pre_landmark:
+                    x, y = p[0]+x1, p[1]+y1
+                    f.write(str(x))
+                    f.write(" ")
+                    f.write(str(y))
+                    f.write("\n")
+            processed_images += 1
+        except Exception as e:
+            print(f"Warning: Failed to detect landmarks in {img_name}: {str(e)}")
+            failed_images.append(img_name)
+            continue
+    
+    print(f"Landmark detection completed: {processed_images} images processed successfully")
+    if failed_images:
+        print(f"Failed to process {len(failed_images)} images: {failed_images[:5]}{'...' if len(failed_images) > 5 else ''}")
 
 if __name__ == "__main__":
     

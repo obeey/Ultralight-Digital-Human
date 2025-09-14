@@ -9,3 +9,17 @@ syncnet_checkpoint
 *.jpg
 data_utils/encoder.onnx
 __MACOSX
+
+input
+output
+checkpoint
+syncnet_ckpt
+
+# 新直播系统临时文件
+temp/
+test_output/
+*.log
+config_local.json
+
+# 环境变量文件
+.env
