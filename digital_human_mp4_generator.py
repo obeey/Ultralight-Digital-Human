@@ -400,8 +400,9 @@ class DigitalHumanMP4System:
         self.script_thread = None
         self.video_threads = []
         
-        # 计数器
+        # 计数器和锁
         self.video_counter = 0
+        self.counter_lock = threading.Lock()  # 保护计数器的线程锁
         
         # 系统状态
         self.running = False
@@ -516,11 +517,19 @@ class DigitalHumanMP4System:
                 text = self.text_queue.get(timeout=1.0)
                 logger.info(f"[{worker_name}] 取到话术: {text}")
                 
-                # 生成文件名
-                self.video_counter += 1
-                base_name = f"digital_human_{self.video_counter:06d}"
+                # 线程安全地生成唯一文件名
+                with self.counter_lock:
+                    self.video_counter += 1
+                    current_counter = self.video_counter
+                
+                # 使用时间戳+计数器+线程ID确保唯一性
+                timestamp = int(time.time() * 1000) % 100000  # 取后5位毫秒
+                thread_id = threading.get_ident() % 1000      # 取后3位线程ID
+                base_name = f"digital_human_{current_counter:06d}_{timestamp}_{thread_id}"
                 audio_filename = f"{base_name}.wav"
                 audio_path = os.path.join(self.config.temp_dir, audio_filename)
+                
+                logger.info(f"[{worker_name}] 生成唯一标识: {base_name}")
                 
                 # 步骤1: 生成TTS音频
                 logger.info(f"[{worker_name}] 生成TTS音频: {text}...")
