@@ -1,16 +1,13 @@
 {
-  "deepseek_base_url": "https://api.deepseek.com",
-  "gpt_sovits_path": "../GPT-SoVITS",
-  
-  "output_mode": "rtmp",
-  "rtmp_url": "rtmp://localhost:1935/live/stream",
-  "http_port": 8080,
-  "http_host": "0.0.0.0",
-  "virtual_camera_device": "/dev/video0",
-  "output_dir": "/mnt/c/temp/stream",
-  
-  "buffer_size": 10,
-  "max_workers": 4,
-  "video_resolution": "1920x1080",
-  "video_fps": 30
+  "deepseek_api_key": "sk-your-deepseek-api-key-here",
+  "deepseek_url": "https://api.deepseek.com/v1/chat/completions",
+  "tts_url": "http://127.0.0.1:9880/tts",
+  "reference_audio": "/mnt/e/CYC/projects/live-selling/assets/250911/reference.FLAC",
+  "reference_text": "宝宝，先让我们点击右下角小黄车里头，您点击任意一个链接点进去以后",
+  "dataset_dir": "input/mxbc_0913/",
+  "checkpoint_path": "checkpoint/195.pth",
+  "udp_port": 1234,
+  "temp_dir": "temp",
+  "script_length": 10,
+  "script_interval": 30.0
 }
