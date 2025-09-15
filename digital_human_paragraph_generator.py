@@ -421,7 +421,7 @@ exm_img = cv2.imread(img_dir + "0.jpg")
 h, w = exm_img.shape[:2]
 
 # 创建视频写入器
-video_writer = cv2.VideoWriter("{video_path}", cv2.VideoWriter_fourcc('M','J','P', 'G'), 25, (w, h))
+video_writer = cv2.VideoWriter("{video_path}", cv2.VideoWriter_fourcc('m','p','4', 'v'), 25, (w, h))
 
 # 生成视频帧
 for i in range(audio_feats.shape[0]):

@@ -56,9 +56,9 @@ exm_img = cv2.imread(img_dir+"0.jpg")
 h, w = exm_img.shape[:2]
 
 if mode=="hubert":
-    video_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc('M','J','P', 'G'), 25, (w, h))
+    video_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc('M','J','P','G'), 25, (w, h))
 if mode=="wenet":
-    video_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc('M','J','P', 'G'), 20, (w, h))
+    video_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc('M','J','P','G'), 20, (w, h))
 step_stride = 0
 img_idx = 0
 

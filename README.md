@@ -1,164 +1,70 @@
-# 实时直播流系统
+# 📚 数字人生成系统文档索引
 
-基于DeepSeek API文案生成、GPT-SoVITS语音合成和FFmpeg视频流的实时直播系统。
+## 🎯 **核心功能文档**
 
-**🎯 原生支持Windows 10 + OBS Studio** - 详见 [Windows使用指南](WINDOWS_GUIDE.md)
+### 🔧 **系统修复与优化**
+- [`DIGITAL_HUMAN_FIX_SUMMARY.md`](./DIGITAL_HUMAN_FIX_SUMMARY.md) - 数字人生成系统修复总结
+- [`AUTO_IP_DETECTION_SUMMARY.md`](./AUTO_IP_DETECTION_SUMMARY.md) - WSL自动IP检测功能实现总结
 
-**💡 简化方案**: 直接在Windows下运行，与OBS在同一系统，无需WSL或虚拟机
+### 📖 **使用指南**
+- [`README.md`](./README.md) - 项目主要说明文档
+- [`DIGITAL_HUMAN_GUIDE.md`](./DIGITAL_HUMAN_GUIDE.md) - 数字人系统使用指南
 
-## 功能特性
+## 🌐 **推流与网络**
 
-- 🤖 **智能文案生成**: 使用DeepSeek API一次性生成长篇直播文案
-- 🎵 **语音合成**: 集成GPT-SoVITS进行高质量语音合成
-- 📹 **视频流输出**: 支持输出到OBS虚拟摄像头
-- ⚡ **实时处理**: 多线程并发处理，空间换时间优化
-- 🔄 **缓冲机制**: 预生成内容缓冲，确保流畅播放
+### 🚀 **UDP推流**
+- [`README_UDP_STREAM.md`](./README_UDP_STREAM.md) - UDP推流功能说明
+- [`UDP_STREAM_SOLUTION.md`](./UDP_STREAM_SOLUTION.md) - UDP推流解决方案
+- [`README_STREAM.md`](./README_STREAM.md) - 推流功能总体说明
+- [`README_EXTERNAL_STREAM.md`](./README_EXTERNAL_STREAM.md) - 外部推流配置
 
-## 系统架构
+### 🎬 **播放器配置**
+- [`VLC_SETUP_GUIDE.md`](./VLC_SETUP_GUIDE.md) - VLC播放器设置指南
 
-```
-DeepSeek API → 文案分割 → 多线程音频生成 → 视频合成 → 虚拟摄像头
-     ↓
-   缓冲池（预生成内容）
-```
+## 🖥️ **平台支持**
 
-## 安装步骤
+### 🐧 **Linux/WSL**
+- [`WSL_GUIDE.md`](./WSL_GUIDE.md) - WSL环境配置指南
 
-### 1. 环境准备
+### 🪟 **Windows**
+- [`WINDOWS_GUIDE.md`](./WINDOWS_GUIDE.md) - Windows环境配置指南
 
-```bash
-# 安装Python依赖
-pip install -r requirements.txt
+## 🤖 **AI集成**
 
-# 设置虚拟摄像头（Linux）
-chmod +x setup_virtual_camera.sh
-./setup_virtual_camera.sh
-```
+### 🧠 **DeepSeek集成**
+- [`README_DeepSeek.md`](./README_DeepSeek.md) - DeepSeek AI集成说明
 
-### 2. 配置设置
+## 📋 **文档分类**
 
-**环境变量配置**（推荐）：
-```bash
-# 方法1：直接设置环境变量
-export DEEPSEEK_API_KEY=your_api_key_here
+### 🔧 **技术实现**
+1. **系统修复** - 解决PyTorch模型维度问题、OpenCV编码问题等
+2. **网络自动化** - WSL IP自动检测、推流目标自动配置
+3. **推流技术** - UDP推流实现、多种推流模式支持
 
-# 方法2：使用.env文件
-cp .env.example .env
-# 编辑.env文件，填入实际的API密钥
-```
+### 📚 **用户指南**
+1. **快速开始** - 系统安装、环境配置、基本使用
+2. **高级功能** - 推流配置、AI集成、批量处理
+3. **故障排除** - 常见问题解决、调试指南
 
-**系统配置**：
-编辑 `config.json` 文件调整其他设置：
-```json
-{
-  "gpt_sovits_path": "../GPT-SoVITS",
-  "virtual_camera_device": "/dev/video0"
-}
-```
+### 🌍 **平台适配**
+1. **跨平台支持** - Windows、Linux、WSL环境
+2. **网络配置** - 自动IP检测、手动配置选项
+3. **播放器集成** - VLC、其他播放器支持
 
-### 3. 启动系统
+## 🎯 **快速导航**
 
-**Windows用户（推荐）**:
-```cmd
-start_windows.bat
-```
+### 新用户推荐阅读顺序：
+1. [`README.md`](./README.md) - 了解项目概况
+2. [`DIGITAL_HUMAN_GUIDE.md`](./DIGITAL_HUMAN_GUIDE.md) - 学习基本使用
+3. [`WSL_GUIDE.md`](./WSL_GUIDE.md) 或 [`WINDOWS_GUIDE.md`](./WINDOWS_GUIDE.md) - 根据您的系统选择
+4. [`AUTO_IP_DETECTION_SUMMARY.md`](./AUTO_IP_DETECTION_SUMMARY.md) - 了解自动IP检测功能
 
-**Linux用户**:
-```bash
-./quick_start.sh
-```
+### 问题排查推荐：
+1. [`DIGITAL_HUMAN_FIX_SUMMARY.md`](./DIGITAL_HUMAN_FIX_SUMMARY.md) - 查看已修复的问题
+2. [`UDP_STREAM_SOLUTION.md`](./UDP_STREAM_SOLUTION.md) - 推流问题解决
+3. [`VLC_SETUP_GUIDE.md`](./VLC_SETUP_GUIDE.md) - 播放器配置问题
 
-## 技术方案详解
+---
 
-### 1. 视频流输出方案
-
-**推荐方案**: 虚拟摄像头设备
-- Linux: 使用 `v4l2loopback` 创建虚拟摄像头
-- Windows: 使用 OBS Virtual Camera 插件
-- macOS: 使用 OBS Studio 或 CamTwist
-
-**命令示例**:
-```bash
-# 创建虚拟摄像头设备
-sudo modprobe v4l2loopback devices=1 video_nr=0
-
-# FFmpeg推送视频流
-ffmpeg -re -i input.mp4 -f v4l2 /dev/video0
-```
-
-### 2. 音频合成集成
-
-- 封装GPT-SoVITS调用接口
-- 支持批量文本转语音
-- 实现音频缓存机制
-- 多线程并发处理
-
-### 3. 文案生成策略
-
-- DeepSeek API一次性生成1500-2000字长篇文案
-- 按句子智能分割处理
-- 实现文案预生成缓冲池
-- 动态补充新内容
-
-### 4. 性能优化
-
-**空间换时间策略**:
-- 预生成音视频缓存
-- 队列管理系统
-- 智能缓冲区监控
-
-**多线程并发**:
-- 文案生成线程
-- 音频合成线程池
-- 视频生成线程
-- 流推送线程
-
-## 使用流程
-
-1. **启动阶段**: 生成长篇文案和对应的音视频作为缓冲
-2. **运行阶段**: 按句子实时生成音视频流
-3. **缓冲管理**: 动态监控缓冲区，及时补充新内容
-4. **流输出**: 持续推送到虚拟摄像头设备
-
-## 系统要求
-
-- Python 3.8+
-- FFmpeg
-- GPT-SoVITS (需要单独安装)
-- Linux: v4l2loopback
-- 足够的磁盘空间用于缓存
-
-## 故障排除
-
-### 虚拟摄像头问题
-```bash
-# 检查设备
-ls /dev/video*
-v4l2-ctl --list-devices
-
-# 重新加载模块
-sudo modprobe -r v4l2loopback
-sudo modprobe v4l2loopback devices=1 video_nr=0
-```
-
-### GPT-SoVITS集成问题
-- 确保GPT-SoVITS路径正确
-- 检查参考音频文件是否存在
-- 验证合成命令参数
-
-### 性能优化建议
-- 增加缓冲区大小
-- 调整工作线程数量
-- 使用SSD存储临时文件
-- 监控系统资源使用
-
-## 扩展功能
-
-- 支持多种语音模型
-- 添加视频特效和转场
-- 实现实时互动功能
-- 支持多平台直播推流
-
-## 许可证
-
-MIT License
+📝 **文档更新时间**: 2025-09-15  
+🔄 **最后更新**: WSL自动IP检测功能实现完成
