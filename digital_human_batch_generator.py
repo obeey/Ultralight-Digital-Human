@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-数字人MP4生成系统 - 生成完整音视频文件版本
-每句话生成数字人视频，然后与音频合并为最终MP4
+数字人批量生成系统 - 每10句话术合并生成连贯视频
+支持智能动作变化和批量处理
 """
 
 import os
@@ -44,7 +44,7 @@ class DigitalHumanConfig:
     
     # 文件路径
     temp_dir: str = "temp"
-    output_dir: str = "output"  # 最终MP4输出目录
+    output_dir: str = "output"
     
     # 话术生成配置
     script_length: int = 10
@@ -52,8 +52,12 @@ class DigitalHumanConfig:
     product_info: str = "蜜雪冰城优惠券"
     auto_start: bool = True
     
+    # 批量处理配置
+    batch_size: int = 10           # 每批处理的句子数量
+    sentence_pause: float = 0.5    # 句子间停顿时间（秒）
+    
     # 优化配置
-    parallel_workers: int = 2   # 并行生成数量
+    parallel_workers: int = 2
     
     @classmethod
     def from_config_file(cls, config_path: str = "config.json"):
@@ -63,10 +67,7 @@ class DigitalHumanConfig:
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
                 
-                # 创建配置实例
                 config = cls()
-                
-                # 更新配置值（安全起见忽略配置文件中的 deepseek_api_key）
                 for key, value in config_data.items():
                     if key == "deepseek_api_key":
                         continue
@@ -81,153 +82,6 @@ class DigitalHumanConfig:
         except Exception as e:
             logger.error(f"加载配置文件失败: {e}，使用默认配置")
             return cls()
-
-class DeepSeekClient:
-    """DeepSeek API客户端"""
-    
-    def __init__(self, config: DigitalHumanConfig):
-        self.config = config
-        self.logger = logging.getLogger(f"{__name__}.DeepSeekClient")
-        # 从环境变量获取API Key
-        self.api_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
-        if not self.api_key:
-            self.logger.error("环境变量 DEEPSEEK_API_KEY 未设置，DeepSeek 将使用备用话术")
-        
-    def generate_live_script(self, product_info: str = "蜜雪冰城优惠券") -> List[str]:
-        """生成直播话术"""
-        try:
-            # 构建提示词
-            prompt = f"""
-你是一个专业的直播带货主播，正在为"{product_info}"进行直播销售。
-请生成{self.config.script_length}句自然流畅的直播话术，每句话要：
-1. 语言生动有趣，充满感染力
-2. 突出产品优势和优惠信息
-3. 引导观众下单购买
-4. 每句话控制在15-25个字
-5. 语气要亲切自然，像和朋友聊天
-
-请直接输出{self.config.script_length}句话术，每句一行，不要编号。
-"""
-            
-            # API请求
-            # 若无API Key，直接返回备用话术
-            if not self.api_key:
-                return self._get_fallback_script()
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            data = {
-                "model": "deepseek-chat",
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.8,
-                "max_tokens": 1000
-            }
-            
-            response = requests.post(
-                self.config.deepseek_url,
-                headers=headers,
-                json=data,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                content = result['choices'][0]['message']['content']
-                
-                # 解析生成的话术
-                sentences = self._parse_sentences(content)
-                self.logger.info(f"DeepSeek生成话术成功，共{len(sentences)}句")
-                return sentences
-            else:
-                self.logger.error(f"DeepSeek API请求失败: {response.status_code} - {response.text}")
-                return self._get_fallback_script()
-                
-        except Exception as e:
-            self.logger.error(f"DeepSeek API异常: {e}")
-            return self._get_fallback_script()
-    
-    def _parse_sentences(self, content: str) -> List[str]:
-        """解析生成的句子"""
-        # 按行分割并清理
-        lines = content.strip().split('\n')
-        sentences = []
-        
-        for line in lines:
-            # 清理行首的编号、符号等
-            line = re.sub(r'^\d+[\.、]\s*', '', line.strip())
-            line = re.sub(r'^[•\-\*]\s*', '', line.strip())
-            
-            if line and len(line) > 5:  # 过滤太短的句子
-                sentences.append(line)
-        
-        return sentences[:self.config.script_length]
-    
-    def _get_fallback_script(self) -> List[str]:
-        """获取备用话术"""
-        return [
-            "宝宝们，蜜雪冰城优惠券来啦！",
-            "现在下单立享超值优惠！",
-            "数量有限，先到先得！",
-            "这个价格真的太划算了！",
-            "快点击小黄车抢购吧！",
-            "错过今天就没有这个价格了！",
-            "已经有很多宝宝下单了！",
-            "库存不多，抓紧时间！",
-            "这么好的机会不要错过！",
-            "赶紧加入购物车吧！"
-        ]
-
-class TTSClient:
-    """TTS客户端"""
-    
-    def __init__(self, config: DigitalHumanConfig):
-        self.config = config
-        self.logger = logging.getLogger(f"{__name__}.TTSClient")
-        
-    def generate_audio(self, text: str, output_path: str) -> bool:
-        """生成TTS音频"""
-        try:
-            # TTS请求参数
-            params = {
-                "text": text,
-                "text_lang": "zh",
-                "ref_audio_path": self.config.reference_audio,
-                "prompt_text": self.config.reference_text,
-                "prompt_lang": "zh",
-                "top_k": 5,
-                "top_p": 1,
-                "temperature": 1,
-                "text_split_method": "cut5",
-                "batch_size": 1,
-                "batch_threshold": 0.75,
-                "split_bucket": True,
-                "speed_factor": 1.0,
-                "fragment_interval": 0.3,
-                "seed": -1,
-                "media_type": "wav",
-                "streaming_mode": False
-            }
-            
-            # 发送请求
-            response = requests.post(self.config.tts_url, json=params, timeout=30)
-            
-            if response.status_code == 200:
-                # 保存音频文件
-                with open(output_path, 'wb') as f:
-                    f.write(response.content)
-                self.logger.info(f"TTS音频生成成功: {output_path}")
-                return True
-            else:
-                self.logger.error(f"TTS请求失败: {response.status_code} - {response.text}")
-                return False
-                
-        except Exception as e:
-            self.logger.error(f"TTS生成异常: {e}")
-            return False
 
 class ActionManager:
     """动作管理器 - 智能选择和管理数字人动作"""
@@ -274,8 +128,26 @@ class ActionManager:
             self.total_images = 1177
             self.logger.warning(f"参考图片目录不存在，使用默认数量: {self.total_images}")
     
-    def analyze_text_action(self, text: str) -> str:
-        """分析文本内容，确定合适的动作类型"""
+    def analyze_batch_actions(self, sentences: List[str]) -> List[Tuple[int, int]]:
+        """分析批量句子，生成动作序列"""
+        action_sequence = []
+        
+        for sentence in sentences:
+            action_type = self._analyze_single_sentence(sentence)
+            action_info = self.action_categories[action_type]
+            
+            # 随机选择一个范围
+            selected_range = random.choice(action_info["ranges"])
+            start_img = min(selected_range[0], self.total_images - 1)
+            end_img = min(selected_range[1], self.total_images - 1)
+            
+            action_sequence.append((start_img, end_img))
+            self.logger.info(f"句子'{sentence[:15]}...' → {action_type} → 范围({start_img}-{end_img})")
+        
+        return action_sequence
+    
+    def _analyze_single_sentence(self, text: str) -> str:
+        """分析单句内容，确定合适的动作类型"""
         text_lower = text.lower()
         
         # 计算每个动作类型的匹配分数
@@ -289,42 +161,169 @@ class ActionManager:
         
         # 选择得分最高的动作类型
         if scores and max(scores.values()) > 0:
-            best_action = max(scores, key=scores.get)
-            self.logger.info(f"文本'{text[:15]}...' 匹配动作类型: {best_action}")
-            return best_action
+            return max(scores, key=scores.get)
         else:
             # 如果没有匹配，随机选择一个动作类型
-            import random
-            action_type = random.choice(list(self.action_categories.keys()))
-            self.logger.info(f"文本'{text[:15]}...' 使用随机动作类型: {action_type}")
-            return action_type
-    
-    def get_action_range(self, text: str) -> Tuple[int, int]:
-        """根据文本内容获取动作图片范围"""
-        action_type = self.analyze_text_action(text)
-        action_info = self.action_categories[action_type]
-        
-        # 随机选择一个范围
-        import random
-        selected_range = random.choice(action_info["ranges"])
-        
-        # 确保范围在有效图片数量内
-        start_img = min(selected_range[0], self.total_images - 1)
-        end_img = min(selected_range[1], self.total_images - 1)
-        
-        self.logger.info(f"选择动作范围: {start_img}-{end_img} ({action_type})")
-        return start_img, end_img
+            return random.choice(list(self.action_categories.keys()))
 
-class DigitalHumanGenerator:
-    """数字人视频生成器"""
+class DeepSeekClient:
+    """DeepSeek API客户端"""
     
     def __init__(self, config: DigitalHumanConfig):
         self.config = config
-        self.logger = logging.getLogger(f"{__name__}.DigitalHumanGenerator")
+        self.logger = logging.getLogger(f"{__name__}.DeepSeekClient")
+        self.api_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+        if not self.api_key:
+            self.logger.error("环境变量 DEEPSEEK_API_KEY 未设置，DeepSeek 将使用备用话术")
+        
+    def generate_live_script(self, product_info: str = "蜜雪冰城优惠券") -> List[str]:
+        """生成直播话术"""
+        try:
+            prompt = f"""
+你是一个专业的直播带货主播，正在为"{product_info}"进行直播销售。
+请生成{self.config.script_length}句自然流畅的直播话术，每句话要：
+1. 语言生动有趣，充满感染力
+2. 突出产品优势和优惠信息
+3. 引导观众下单购买
+4. 每句话控制在15-25个字
+5. 语气要亲切自然，像和朋友聊天
+6. 句子之间要有逻辑连贯性，适合连续播放
+
+请直接输出{self.config.script_length}句话术，每句一行，不要编号。
+"""
+            
+            if not self.api_key:
+                return self._get_fallback_script()
+            
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "model": "deepseek-chat",
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.8,
+                "max_tokens": 1000
+            }
+            
+            response = requests.post(
+                self.config.deepseek_url,
+                headers=headers,
+                json=data,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                content = result['choices'][0]['message']['content']
+                sentences = self._parse_sentences(content)
+                self.logger.info(f"DeepSeek生成话术成功，共{len(sentences)}句")
+                return sentences
+            else:
+                self.logger.error(f"DeepSeek API请求失败: {response.status_code} - {response.text}")
+                return self._get_fallback_script()
+                
+        except Exception as e:
+            self.logger.error(f"DeepSeek API异常: {e}")
+            return self._get_fallback_script()
+    
+    def _parse_sentences(self, content: str) -> List[str]:
+        """解析生成的句子"""
+        lines = content.strip().split('\n')
+        sentences = []
+        
+        for line in lines:
+            line = re.sub(r'^\d+[\.、]\s*', '', line.strip())
+            line = re.sub(r'^[•\-\*]\s*', '', line.strip())
+            
+            if line and len(line) > 5:
+                sentences.append(line)
+        
+        return sentences[:self.config.script_length]
+    
+    def _get_fallback_script(self) -> List[str]:
+        """获取备用话术"""
+        return [
+            "宝宝们，蜜雪冰城优惠券来啦！",
+            "现在下单立享超值优惠！",
+            "数量有限，先到先得！",
+            "这个价格真的太划算了！",
+            "快点击小黄车抢购吧！",
+            "错过今天就没有这个价格了！",
+            "已经有很多宝宝下单了！",
+            "库存不多，抓紧时间！",
+            "这么好的机会不要错过！",
+            "赶紧加入购物车吧！"
+        ]
+
+class BatchTTSClient:
+    """批量TTS客户端"""
+    
+    def __init__(self, config: DigitalHumanConfig):
+        self.config = config
+        self.logger = logging.getLogger(f"{__name__}.BatchTTSClient")
+        
+    def generate_batch_audio(self, sentences: List[str], output_path: str) -> bool:
+        """生成批量TTS音频（合并多句话）"""
+        try:
+            # 将多句话直接连接，不添加停顿
+            combined_text = "".join(sentences)
+            
+            self.logger.info(f"合并文本长度: {len(combined_text)} 字符")
+            self.logger.info(f"合并内容预览: {combined_text[:100]}...")
+            
+            # TTS请求参数
+            params = {
+                "text": combined_text,
+                "text_lang": "zh",
+                "ref_audio_path": self.config.reference_audio,
+                "prompt_text": self.config.reference_text,
+                "prompt_lang": "zh",
+                "top_k": 5,
+                "top_p": 1,
+                "temperature": 1,
+                "text_split_method": "cut5",
+                "batch_size": 1,
+                "batch_threshold": 0.75,
+                "split_bucket": True,
+                "speed_factor": 1.0,
+                "fragment_interval": 0.3,
+                "seed": -1,
+                "media_type": "wav",
+                "streaming_mode": False
+            }
+            
+            response = requests.post(self.config.tts_url, json=params, timeout=60)  # 增加超时时间
+            
+            if response.status_code == 200:
+                with open(output_path, 'wb') as f:
+                    f.write(response.content)
+                
+                # 检查文件大小
+                file_size = os.path.getsize(output_path)
+                self.logger.info(f"批量TTS音频生成成功: {output_path} (大小: {file_size} 字节)")
+                return True
+            else:
+                self.logger.error(f"批量TTS请求失败: {response.status_code} - {response.text}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"批量TTS生成异常: {e}")
+            return False
+
+class BatchDigitalHumanGenerator:
+    """批量数字人视频生成器"""
+    
+    def __init__(self, config: DigitalHumanConfig):
+        self.config = config
+        self.logger = logging.getLogger(f"{__name__}.BatchDigitalHumanGenerator")
         self.action_manager = ActionManager(config)
         
-    def generate_video(self, audio_path: str, text: str = "") -> Optional[str]:
-        """生成数字人视频（无音频）"""
+    def generate_batch_video(self, audio_path: str, sentences: List[str]) -> Optional[str]:
+        """生成批量数字人视频"""
         try:
             # 生成输出路径
             base_name = os.path.basename(audio_path).replace('.wav', '')
@@ -338,20 +337,20 @@ class DigitalHumanGenerator:
             if not self._extract_hubert_features(audio_path, hubert_output_path):
                 return None
             
-            # 步骤2: 运行智能动作数字人推理
-            self.logger.info("步骤2: 生成数字人视频（智能动作选择）...")
+            # 步骤2: 运行批量智能推理
+            self.logger.info("步骤2: 生成批量数字人视频（智能动作变化）...")
             
-            if not self._run_smart_inference(hubert_output_path, video_path, text):
+            if not self._run_batch_inference(hubert_output_path, video_path, sentences):
                 return None
             
             # 清理HuBERT特征文件
             self._cleanup_intermediate_files(hubert_output_path)
             
-            self.logger.info(f"数字人视频生成成功: {video_path}")
+            self.logger.info(f"批量数字人视频生成成功: {video_path}")
             return video_path
             
         except Exception as e:
-            self.logger.error(f"数字人视频生成异常: {e}")
+            self.logger.error(f"批量数字人视频生成异常: {e}")
             return None
     
     def _extract_hubert_features(self, audio_path: str, output_path: str) -> bool:
@@ -378,15 +377,15 @@ class DigitalHumanGenerator:
             self.logger.error(f"HuBERT特征提取异常: {e}")
             return False
     
-    def _run_smart_inference(self, hubert_path: str, video_path: str, text: str) -> bool:
-        """运行智能动作数字人推理"""
+    def _run_batch_inference(self, hubert_path: str, video_path: str, sentences: List[str]) -> bool:
+        """运行批量智能推理"""
         try:
-            # 创建临时的智能推理脚本
-            smart_script_path = os.path.join(self.config.temp_dir, f"smart_inference_{int(time.time())}.py")
-            self._create_smart_inference_script(smart_script_path, text)
+            # 创建临时的批量推理脚本
+            batch_script_path = os.path.join(self.config.temp_dir, f"batch_inference_{int(time.time())}.py")
+            self._create_batch_inference_script(batch_script_path, sentences)
             
             cmd = [
-                "python", smart_script_path,
+                "python", batch_script_path,
                 "--asr", "hubert",
                 "--dataset", self.config.dataset_dir,
                 "--audio_feat", hubert_path,
@@ -397,31 +396,34 @@ class DigitalHumanGenerator:
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.getcwd())
             
             # 清理临时脚本
-            if os.path.exists(smart_script_path):
-                os.remove(smart_script_path)
+            if os.path.exists(batch_script_path):
+                os.remove(batch_script_path)
             
             if result.returncode != 0:
-                self.logger.error(f"智能数字人推理失败: {result.stderr}")
+                self.logger.error(f"批量智能推理失败: {result.stderr}")
                 return False
                 
             if not os.path.exists(video_path):
-                self.logger.error(f"数字人视频未生成: {video_path}")
+                self.logger.error(f"批量数字人视频未生成: {video_path}")
                 return False
             
             return True
             
         except Exception as e:
-            self.logger.error(f"智能数字人推理异常: {e}")
+            self.logger.error(f"批量智能推理异常: {e}")
             return False
     
-    def _create_smart_inference_script(self, script_path: str, text: str):
-        """创建智能动作推理脚本"""
-        # 获取动作范围
-        start_img, end_img = self.action_manager.get_action_range(text)
+    def _create_batch_inference_script(self, script_path: str, sentences: List[str]):
+        """创建批量智能推理脚本"""
+        # 分析批量动作序列
+        action_sequence = self.action_manager.analyze_batch_actions(sentences)
         
         # 读取原始推理脚本
         with open("inference.py", "r", encoding="utf-8") as f:
             original_script = f.read()
+        
+        # 生成动作切换逻辑
+        action_logic = self._generate_batch_action_logic(action_sequence, sentences)
         
         # 修改图片选择逻辑
         old_logic = '''if img_idx>len_img - 1:
@@ -429,25 +431,6 @@ class DigitalHumanGenerator:
     if img_idx<1:
         step_stride = 1
     img_idx += step_stride'''
-        
-        new_logic = f'''# 智能动作选择 - 根据文本内容选择动作范围 {start_img}-{end_img}
-    action_range_start = {start_img}
-    action_range_end = {end_img}
-    action_range_size = action_range_end - action_range_start + 1
-    
-    if action_range_size <= 1:
-        # 如果范围只有一张图片，重复使用
-        img_idx = action_range_start
-    else:
-        # 在动作范围内循环
-        cycle_pos = i % (action_range_size * 2 - 2) if action_range_size > 1 else 0
-        if cycle_pos < action_range_size:
-            img_idx = action_range_start + cycle_pos
-        else:
-            img_idx = action_range_start + (action_range_size * 2 - 2 - cycle_pos)
-    
-    # 确保图片索引在有效范围内
-    img_idx = max(0, min(img_idx, len_img))'''
         
         # 添加系统路径以解决模块导入问题
         path_fix = '''import sys
@@ -462,51 +445,81 @@ os.chdir(project_root)
 '''
         
         # 替换逻辑
-        smart_script = original_script.replace(old_logic, new_logic)
+        batch_script = original_script.replace(old_logic, action_logic)
         
         # 在导入语句前添加路径修复
-        smart_script = smart_script.replace('import argparse', path_fix + 'import argparse')
+        batch_script = batch_script.replace('import argparse', path_fix + 'import argparse')
         
         # 添加注释说明
-        smart_script = f'''# 智能动作数字人推理脚本
-# 文本内容: {text[:50]}...
-# 动作范围: {start_img}-{end_img}
+        sentences_preview = " | ".join([s[:10] + "..." for s in sentences[:3]])
+        batch_script = f'''# 批量智能动作数字人推理脚本
+# 句子数量: {len(sentences)}
+# 内容预览: {sentences_preview}
+# 动作序列: {len(action_sequence)} 个动作范围
 # 生成时间: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
-{smart_script}'''
+{batch_script}'''
         
         # 写入临时脚本
         with open(script_path, "w", encoding="utf-8") as f:
-            f.write(smart_script)
+            f.write(batch_script)
         
-        self.logger.info(f"创建智能推理脚本: {script_path} (动作范围: {start_img}-{end_img})")
+        self.logger.info(f"创建批量推理脚本: {script_path} ({len(sentences)}句话, {len(action_sequence)}个动作)")
     
-    def _run_inference(self, hubert_path: str, video_path: str) -> bool:
-        """运行数字人推理（保留原始方法作为备用）"""
-        try:
-            cmd = [
-                "python", "inference.py",
-                "--asr", "hubert",
-                "--dataset", self.config.dataset_dir,
-                "--audio_feat", hubert_path,
-                "--checkpoint", self.config.checkpoint_path,
-                "--save_path", video_path
-            ]
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.getcwd())
-            
-            if result.returncode != 0:
-                self.logger.error(f"数字人推理失败: {result.stderr}")
-                return False
-                
-            if os.path.exists(video_path):
-                return True
-            
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"数字人推理异常: {e}")
-            return False
+    def _generate_batch_action_logic(self, action_sequence: List[Tuple[int, int]], sentences: List[str]) -> str:
+        """生成批量动作切换逻辑"""
+        # 估算每句话的帧数（粗略估算：每个字符约1帧）
+        sentence_frames = []
+        total_chars = sum(len(s) for s in sentences)
+        
+        for sentence in sentences:
+            # 根据句子长度分配帧数
+            sentence_char_ratio = len(sentence) / total_chars if total_chars > 0 else 1.0 / len(sentences)
+            estimated_frames = max(10, int(sentence_char_ratio * 100))  # 最少10帧
+            sentence_frames.append(estimated_frames)
+        
+        # 生成动作切换逻辑代码
+        logic_code = f'''# 批量智能动作选择
+    # 动作序列: {action_sequence}
+    # 句子帧数: {sentence_frames}
+    
+    action_ranges = {action_sequence}
+    sentence_frames = {sentence_frames}
+    
+    # 计算当前帧属于哪个句子
+    current_sentence = 0
+    frame_in_sentence = i
+    
+    for idx, frames in enumerate(sentence_frames):
+        if frame_in_sentence < frames:
+            current_sentence = idx
+            break
+        frame_in_sentence -= frames
+    
+    # 确保索引在有效范围内
+    current_sentence = min(current_sentence, len(action_ranges) - 1)
+    
+    # 获取当前句子的动作范围
+    if current_sentence < len(action_ranges):
+        start_img, end_img = action_ranges[current_sentence]
+        range_size = end_img - start_img + 1
+        
+        if range_size <= 1:
+            img_idx = start_img
+        else:
+            # 在当前动作范围内循环
+            cycle_pos = frame_in_sentence % (range_size * 2 - 2) if range_size > 1 else 0
+            if cycle_pos < range_size:
+                img_idx = start_img + cycle_pos
+            else:
+                img_idx = start_img + (range_size * 2 - 2 - cycle_pos)
+    else:
+        img_idx = 0
+    
+    # 确保图片索引在有效范围内
+    img_idx = max(0, min(img_idx, len_img))'''
+        
+        return logic_code
     
     def _cleanup_intermediate_files(self, hubert_path: str):
         """清理中间文件"""
@@ -529,17 +542,16 @@ class VideoAudioMerger:
         try:
             self.logger.info(f"合并视频音频: {video_path} + {audio_path} -> {output_path}")
             
-            # 使用FFmpeg合并视频和音频
             cmd = [
                 "ffmpeg", "-y",
-                "-i", video_path,  # 输入视频（无音频）
-                "-i", audio_path,  # 输入音频
-                "-c:v", "copy",    # 视频流直接复制，不重新编码
-                "-c:a", "aac",     # 音频编码为AAC
-                "-b:a", "128k",    # 音频比特率
-                "-ar", "32000",    # 音频采样率匹配TTS输出
-                "-ac", "1",        # 单声道
-                "-shortest",       # 以较短的流为准
+                "-i", video_path,
+                "-i", audio_path,
+                "-c:v", "copy",
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-ar", "32000",
+                "-ac", "1",
+                "-shortest",
                 output_path
             ]
             
@@ -559,12 +571,10 @@ class VideoAudioMerger:
     def cleanup_intermediate_files(self, video_path: str, audio_path: str):
         """清理中间文件"""
         try:
-            # 删除临时视频文件
             if video_path and os.path.exists(video_path):
                 os.remove(video_path)
                 self.logger.info(f"已清理临时视频文件: {video_path}")
             
-            # 删除音频文件
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
                 self.logger.info(f"已清理音频文件: {audio_path}")
@@ -572,27 +582,27 @@ class VideoAudioMerger:
         except Exception as e:
             self.logger.warning(f"清理中间文件失败: {e}")
 
-class DigitalHumanMP4System:
-    """数字人MP4生成系统主类"""
+class BatchDigitalHumanSystem:
+    """批量数字人生成系统主类"""
     
     def __init__(self):
         self.config = DigitalHumanConfig.from_config_file()
         self.deepseek_client = DeepSeekClient(self.config)
-        self.tts_client = TTSClient(self.config)
-        self.video_generator = DigitalHumanGenerator(self.config)
+        self.tts_client = BatchTTSClient(self.config)
+        self.video_generator = BatchDigitalHumanGenerator(self.config)
         self.video_merger = VideoAudioMerger(self.config)
         
         # 队列
-        self.text_queue = queue.Queue(maxsize=100)
-        self.completed_videos = []  # 存储完成的视频路径
+        self.batch_queue = queue.Queue(maxsize=50)  # 批量处理队列
+        self.completed_videos = []
         
         # 线程
         self.script_thread = None
         self.video_threads = []
         
         # 计数器和锁
-        self.video_counter = 0
-        self.counter_lock = threading.Lock()  # 保护计数器的线程锁
+        self.batch_counter = 0
+        self.counter_lock = threading.Lock()
         
         # 系统状态
         self.running = False
@@ -603,7 +613,7 @@ class DigitalHumanMP4System:
     def start(self, product_info: str = None):
         """启动系统"""
         try:
-            logger.info("启动数字人MP4生成系统...")
+            logger.info("启动批量数字人生成系统...")
             
             if product_info:
                 self.product_info = product_info
@@ -623,30 +633,15 @@ class DigitalHumanMP4System:
             self.script_thread = threading.Thread(target=self._script_generation_worker, daemon=True)
             self.script_thread.start()
             
-            # 启动多个视频生成线程（并行处理）
+            # 启动批量视频生成线程
             for i in range(self.config.parallel_workers):
-                video_thread = threading.Thread(target=self._video_generation_worker, daemon=True, name=f"video_worker_{i}")
+                video_thread = threading.Thread(target=self._batch_video_generation_worker, daemon=True, name=f"batch_worker_{i}")
                 video_thread.start()
                 self.video_threads.append(video_thread)
             
-            logger.info("数字人MP4生成系统已启动")
-            logger.info(f"线程状态: script_alive={self.script_thread.is_alive()} video_workers={len([t for t in self.video_threads if t.is_alive()])}")
-            
-            # 立即预热多条话术，填充队列
-            bootstrap_scripts = [
-                f"{self.product_info}直播马上开始，福利多多，点击小黄车立刻抢购！",
-                f"{self.product_info}超值优惠限时开抢，喜欢的宝子抓紧下单！",
-                f"{self.product_info}现在下单立享超值优惠，数量有限先到先得！",
-                f"{self.product_info}这个价格真的太划算了，快点击小黄车抢购吧！",
-                f"{self.product_info}错过今天就没有这个价格了，赶紧加入购物车！"
-            ]
-            
-            for bootstrap in bootstrap_scripts:
-                try:
-                    self.text_queue.put_nowait(bootstrap)
-                    logger.info(f"预热话术已入队: {bootstrap}")
-                except Exception:
-                    pass
+            logger.info("批量数字人生成系统已启动")
+            logger.info(f"批量大小: {self.config.batch_size} 句/批")
+            logger.info(f"线程状态: script_alive={self.script_thread.is_alive()} batch_workers={len([t for t in self.video_threads if t.is_alive()])}")
             
             return True
             
@@ -656,14 +651,15 @@ class DigitalHumanMP4System:
     
     def stop(self):
         """停止系统"""
-        logger.info("停止数字人MP4生成系统...")
+        logger.info("停止批量数字人生成系统...")
         self.running = False
         
         # 只显示统计信息
         total_videos = len(self.completed_videos)
         if total_videos > 0:
-            logger.info(f"✅ 本次共生成 {total_videos} 个数字人MP4文件")
+            logger.info(f"✅ 本次共生成 {total_videos} 个批量数字人MP4文件")
             logger.info(f"📁 输出目录: {self.config.output_dir}")
+            logger.info(f"📊 平均每个文件包含 {self.config.batch_size} 句话术")
         else:
             logger.info("本次未生成任何视频文件")
     
@@ -672,71 +668,63 @@ class DigitalHumanMP4System:
         while self.running:
             try:
                 # 生成新的话术
-                logger.info(f"正在为'{self.product_info}'生成新话术...")
+                logger.info(f"正在为'{self.product_info}'生成新话术批次...")
                 sentences = self.deepseek_client.generate_live_script(self.product_info)
                 logger.info(f"生成话术条数: {len(sentences)}")
                 
-                # 将句子添加到文本队列
-                added = 0
-                for sentence in sentences:
-                    if not self.running:
-                        break
+                # 将整批句子添加到批量队列
+                if sentences:
                     try:
-                        self.text_queue.put(sentence, timeout=1.0)
-                        added += 1
+                        self.batch_queue.put(sentences, timeout=5.0)
+                        logger.info(f"话术批次已入队: {len(sentences)} 句")
                     except queue.Full:
-                        logger.warning("文本队列已满，跳过部分话术")
-                        break
-                logger.info(f"本轮已入队话术数: {added}")
+                        logger.warning("批量队列已满，跳过本批次话术")
                 
                 # 等待一段时间再生成新话术
                 time.sleep(self.config.script_interval)
                 
             except Exception as e:
                 logger.error(f"话术生成工作线程异常: {e}")
-                time.sleep(5)  # 出错后等待5秒再重试
+                time.sleep(5)
     
-    def _video_generation_worker(self):
-        """视频生成工作线程（支持并行）"""
+    def _batch_video_generation_worker(self):
+        """批量视频生成工作线程"""
         worker_name = threading.current_thread().name
-        logger.info(f"视频生成工作线程 {worker_name} 已启动")
+        logger.info(f"批量视频生成工作线程 {worker_name} 已启动")
         
         while self.running:
             try:
-                # 从文本队列获取任务
-                text = self.text_queue.get(timeout=1.0)
-                logger.info(f"[{worker_name}] 取到话术: {text}")
+                # 从批量队列获取任务
+                sentences = self.batch_queue.get(timeout=1.0)
+                logger.info(f"[{worker_name}] 取到话术批次: {len(sentences)} 句")
                 
                 # 线程安全地生成唯一文件名
                 with self.counter_lock:
-                    self.video_counter += 1
-                    current_counter = self.video_counter
+                    self.batch_counter += 1
+                    current_counter = self.batch_counter
                 
-                # 使用时间戳+计数器+线程ID确保唯一性
-                timestamp = int(time.time() * 1000) % 100000  # 取后5位毫秒
-                thread_id = threading.get_ident() % 1000      # 取后3位线程ID
-                base_name = f"digital_human_{current_counter:06d}_{timestamp}_{thread_id}"
+                timestamp = int(time.time() * 1000) % 100000
+                thread_id = threading.get_ident() % 1000
+                base_name = f"batch_digital_human_{current_counter:06d}_{timestamp}_{thread_id}"
                 audio_filename = f"{base_name}.wav"
                 audio_path = os.path.join(self.config.temp_dir, audio_filename)
                 
-                logger.info(f"[{worker_name}] 生成唯一标识: {base_name}")
+                logger.info(f"[{worker_name}] 批次标识: {base_name}")
                 
-                # 步骤1: 生成TTS音频
-                logger.info(f"[{worker_name}] 生成TTS音频: {text}...")
-                if not self.tts_client.generate_audio(text, audio_path):
-                    logger.error(f"[{worker_name}] TTS生成失败，跳过该条")
+                # 步骤1: 生成批量TTS音频
+                logger.info(f"[{worker_name}] 生成批量TTS音频: {len(sentences)} 句话...")
+                if not self.tts_client.generate_batch_audio(sentences, audio_path):
+                    logger.error(f"[{worker_name}] 批量TTS生成失败，跳过该批次")
                     continue
                 
-                logger.info(f"[{worker_name}] TTS音频生成成功: {audio_path}")
+                logger.info(f"[{worker_name}] 批量TTS音频生成成功: {audio_path}")
                 
-                # 步骤2: 生成数字人视频（无音频，智能动作选择）
-                logger.info(f"[{worker_name}] 开始生成数字人视频，音频文件: {audio_path}")
-                logger.info(f"[{worker_name}] 话术内容: {text}")
-                video_path = self.video_generator.generate_video(audio_path, text)
+                # 步骤2: 生成批量数字人视频
+                logger.info(f"[{worker_name}] 开始生成批量数字人视频...")
+                video_path = self.video_generator.generate_batch_video(audio_path, sentences)
                 
                 if not video_path:
-                    logger.error(f"[{worker_name}] 数字人视频生成失败")
-                    # 清理音频文件
+                    logger.error(f"[{worker_name}] 批量数字人视频生成失败")
                     if os.path.exists(audio_path):
                         os.remove(audio_path)
                     continue
@@ -752,33 +740,23 @@ class DigitalHumanMP4System:
                     # 验证最终文件是否真的存在
                     if os.path.exists(final_output_path):
                         file_size = os.path.getsize(final_output_path)
-                        logger.info(f"[{worker_name}] ✅ 数字人MP4生成完成: {final_output_path} (大小: {file_size} 字节)")
+                        logger.info(f"[{worker_name}] ✅ 批量数字人MP4生成完成: {final_output_path} (大小: {file_size} 字节)")
+                        logger.info(f"[{worker_name}] 📝 包含话术: {len(sentences)} 句")
                         self.completed_videos.append(final_output_path)
                         
-                        # 步骤4: 清理中间文件 (只删除temp目录下的文件)
+                        # 清理中间文件
                         self.video_merger.cleanup_intermediate_files(video_path, audio_path)
                         logger.info(f"[{worker_name}] 已清理中间文件，保留最终MP4: {final_output_path}")
                     else:
                         logger.error(f"[{worker_name}] 合并成功但最终文件不存在: {final_output_path}")
                 else:
                     logger.error(f"[{worker_name}] 视频音频合并失败")
-                    # 清理失败的中间文件
                     self.video_merger.cleanup_intermediate_files(video_path, audio_path)
                     
             except queue.Empty:
                 continue
             except Exception as e:
-                logger.error(f"[{worker_name}] 视频生成工作线程异常: {e}")
-    
-    def add_manual_text(self, text: str):
-        """手动添加文本"""
-        try:
-            self.text_queue.put(text, timeout=1.0)
-            logger.info(f"手动添加文本到队列: {text}")
-            return True
-        except queue.Full:
-            logger.warning("文本队列已满")
-            return False
+                logger.error(f"[{worker_name}] 批量视频生成工作线程异常: {e}")
     
     def get_completed_videos(self) -> List[str]:
         """获取已完成的视频列表"""
@@ -816,25 +794,35 @@ class DigitalHumanMP4System:
 
 def main():
     """主函数"""
-    print("🎬 数字人MP4生成系统 - DeepSeek AI版本")
-    print("=" * 50)
+    print("🎬 批量数字人MP4生成系统 - 连贯视频版本")
+    print("=" * 60)
+    
+    # 显示功能特点
+    print("🚀 批量处理特点:")
+    print("  ✅ 每10句话术合并生成一个连贯视频")
+    print("  ✅ 智能动作变化 - 根据内容切换动作")
+    print("  ✅ 自然语音停顿 - 句子间自动添加停顿")
+    print("  ✅ 流畅动作过渡 - 避免突兀的动作跳跃")
+    print("  ✅ 批量并行处理 - 提升生成效率")
+    print("-" * 60)
     
     # 创建系统实例
-    system = DigitalHumanMP4System()
+    system = BatchDigitalHumanSystem()
     
-    # 自动从配置读取产品信息；若未配置则使用默认
+    # 自动从配置读取产品信息
     product_info = getattr(system.config, "product_info", None) or "蜜雪冰城优惠券"
     
-    # 启动系统（无交互，直接运行）
+    # 启动系统
     if not system.start(product_info):
         print("❌ 系统启动失败")
         return
     
-    print(f"\n🚀 系统已启动！自动为 '{product_info}' 持续生成话术并制作数字人MP4")
+    print(f"\n🚀 批量系统已启动！自动为 '{product_info}' 持续生成连贯数字人视频")
     print(f"📁 输出目录: {system.config.output_dir}")
+    print(f"📊 批量大小: {system.config.batch_size} 句话/视频")
     print("🔄 持续运行中，按 Ctrl+C 停止")
-    print("🎥 每句话术将生成一个完整的数字人MP4文件")
-    print("-" * 50)
+    print("🎭 每个视频包含多句连贯话术，动作自然变化")
+    print("-" * 60)
     
     try:
         # 持续运行，每分钟显示进度
@@ -843,7 +831,8 @@ def main():
             time.sleep(60)  # 每分钟检查一次
             completed_count = len(system.get_completed_videos())
             elapsed_minutes = int((time.time() - start_time) / 60)
-            logger.info(f"系统运行: {elapsed_minutes} 分钟，已完成 {completed_count} 个数字人MP4")
+            total_sentences = completed_count * system.config.batch_size
+            logger.info(f"系统运行: {elapsed_minutes} 分钟，已完成 {completed_count} 个批量MP4 (约 {total_sentences} 句话术)")
             
     except KeyboardInterrupt:
         print("\n收到中断信号...")
