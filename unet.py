@@ -98,8 +98,8 @@ class AudioConvWenet(nn.Module):
         super(AudioConvWenet, self).__init__()
         # ch = [16, 32, 64, 128, 256]   # if you want to run this model on a mobile device, use this. 
         ch = [32, 64, 128, 256, 512]
-        # 修复：wenet模式下音频特征输入通道数应该是8，而不是128
-        self.conv1 = InvertedResidual(8, ch[1], stride=1, use_res_connect=False, expand_ratio=2)
+        # 修复：wenet模式下音频特征输入通道数应该是128，匹配数据集输出
+        self.conv1 = InvertedResidual(128, ch[1], stride=1, use_res_connect=False, expand_ratio=2)
         self.conv2 = InvertedResidual(ch[1], ch[2], stride=1, use_res_connect=False, expand_ratio=2)
         
         self.conv3 = nn.Conv2d(ch[2], ch[3], kernel_size=3, padding=1, stride=(1,2))

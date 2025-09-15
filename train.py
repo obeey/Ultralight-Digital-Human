@@ -67,12 +67,23 @@ def cosine_loss(a, v, y):
 
 def train(net, epoch, batch_size, lr):
     content_loss = PerceptualLoss(torch.nn.MSELoss())
+    syncnet = None
+    audio_feat_adapter = None
+    
     if use_syncnet:
         if args.syncnet_checkpoint == "":
             raise ValueError("Using syncnet, you need to set 'syncnet_checkpoint'.Please check README")
             
         syncnet = SyncNet_color(args.asr).eval().to(device)
         syncnet.load_state_dict(torch.load(args.syncnet_checkpoint))
+        
+        # 创建音频特征适配器，避免在训练循环中动态创建
+        if args.asr == "wenet":
+            # 为wenet模式创建适配器 (假设从128通道到256通道)
+            audio_feat_adapter = torch.nn.Conv2d(128, 256, 1).to(device)
+        else:  # hubert模式
+            # 为hubert模式创建适配器 (假设从16通道到32通道)
+            audio_feat_adapter = torch.nn.Conv2d(16, 32, 1).to(device)
     save_dir= args.save_dir
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
@@ -101,16 +112,24 @@ def train(net, epoch, batch_size, lr):
                 labels = labels.to(device)
                 audio_feat = audio_feat.to(device)
                 preds = net(imgs, audio_feat)
-                if use_syncnet:
+                sync_loss = 0  # 初始化sync_loss
+                if use_syncnet and syncnet is not None and audio_feat_adapter is not None:
                     y = torch.ones([preds.shape[0],1]).float().to(device)
-                    # 将音频特征从 (B,16,32,32) 转换为 (B,32,32,32) 以匹配 SyncNet
-                    audio_feat_syncnet = torch.cat([audio_feat, audio_feat], dim=1)  # 重复通道维度
+                    # 正确处理音频特征维度以匹配 SyncNet
+                    if args.asr == "wenet":
+                        # wenet模式: 使用预定义的适配器调整通道数
+                        audio_feat_syncnet = audio_feat_adapter(audio_feat)
+                    else:  # hubert模式
+                        # hubert模式: 使用预定义的适配器调整通道数
+                        audio_feat_syncnet = audio_feat_adapter(audio_feat)
+                    
                     a, v = syncnet(preds, audio_feat_syncnet)
                     sync_loss = cosine_loss(a, v, y)
                 loss_PerceptualLoss = content_loss.get_loss(preds, labels)
                 loss_pixel = criterion(preds, labels)
                 if use_syncnet:
-                    loss = loss_pixel + loss_PerceptualLoss*0.01 + 10*sync_loss
+                    # 降低sync_loss权重，避免过度影响训练
+                    loss = loss_pixel + loss_PerceptualLoss*0.01 + 1.0*sync_loss
                 else:
                     loss = loss_pixel + loss_PerceptualLoss*0.01
                 p.set_postfix(**{'loss (batch)': loss.item()})
