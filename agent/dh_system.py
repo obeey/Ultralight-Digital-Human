@@ -17,7 +17,7 @@ try:
     from .dh_config import DigitalHumanConfig
     from .dh_clients import DeepSeekClient
     from .dh_generator import DigitalHumanGenerator
-    from .dh_streamer import UDPStreamer
+    from .dh_streamer_async import AsyncUDPStreamer
 except ImportError as e:
     print(f"导入模块失败: {e}")
     print("请确保所有模块文件在同一目录下")
@@ -44,11 +44,11 @@ class DigitalHumanParagraphSystem:
         # 初始化组件
         self.deepseek_client = DeepSeekClient()
         self.generator = DigitalHumanGenerator(self.config)
-        self.streamer = UDPStreamer(self.config)
+        self.async_streamer = AsyncUDPStreamer(self.config, max_concurrent_streams=3, stream_timeout=300)
         
         # 创建队列
         self.text_queue = queue.Queue(maxsize=self.config.text_queue_size)
-        self.video_queue = queue.Queue(maxsize=self.config.video_queue_size)
+        # 注意：异步推流不需要video_queue，直接添加任务即可
         
         # 线程控制
         self.running = False
@@ -101,11 +101,21 @@ class DigitalHumanParagraphSystem:
             self.threads.append(video_thread)
             video_thread.start()
         
-        # 启动UDP推流
+        # 启动异步UDP推流
         if self.config.enable_streaming:
-            self.streamer.start_stream(self.video_queue)
+            self.async_streamer.start()
+            logger.info("异步推流器已启动")
         
         logger.info("所有工作线程已启动")
+        
+        # 启动推流状态监控线程
+        if self.config.enable_streaming:
+            monitor_thread = threading.Thread(
+                target=self._stream_monitor_worker,
+                daemon=True
+            )
+            self.threads.append(monitor_thread)
+            monitor_thread.start()
     
     def stop(self):
         """停止系统"""
@@ -115,9 +125,9 @@ class DigitalHumanParagraphSystem:
         logger.info("正在停止数字人段落系统...")
         self.running = False
         
-        # 停止推流
+        # 停止异步推流
         if self.config.enable_streaming:
-            self.streamer.stop_stream()
+            self.async_streamer.stop()
         
         # 等待所有线程结束
         for thread in self.threads:
@@ -185,13 +195,37 @@ class DigitalHumanParagraphSystem:
                 
                 logger.info(f"工作线程 {worker_id} 完成段落处理: {video_path}")
                 
-                # 添加到视频队列用于推流
+                # 立即添加到异步推流队列，不阻塞继续下一段推理
                 if self.config.enable_streaming:
-                    self.video_queue.put((video_path, audio_path))
+                    task_id = self.async_streamer.add_stream_task(video_path, audio_path)
+                    if task_id:
+                        logger.info(f"工作线程 {worker_id} 推流任务已添加: {task_id}")
+                        logger.info(f"工作线程 {worker_id} 立即继续下一段推理...")
+                    else:
+                        logger.error(f"工作线程 {worker_id} 添加推流任务失败")
                 
             except Exception as e:
                 logger.error(f"工作线程 {worker_id} 异常: {e}")
                 time.sleep(1)
+    
+    def _stream_monitor_worker(self):
+        """推流状态监控线程"""
+        logger.info("推流状态监控线程启动")
+        
+        while self.running:
+            try:
+                # 每30秒输出一次推流状态
+                time.sleep(30)
+                
+                if self.config.enable_streaming:
+                    queue_info = self.async_streamer.get_queue_info()
+                    logger.info(f"推流状态监控: {queue_info}")
+                
+            except Exception as e:
+                logger.error(f"推流状态监控异常: {e}")
+                time.sleep(5)
+        
+        logger.info("推流状态监控线程已退出")
     
     def generate_single_paragraph(self, text: str, output_path: Optional[str] = None) -> Optional[str]:
         """生成单个段落视频"""
