@@ -8,6 +8,6 @@
   "checkpoint_path": "checkpoint/195.pth",
   "udp_port": 1234,
   "temp_dir": "temp",
-  "script_length": 10,
+  "paragraph_length": 200,
   "script_interval": 30.0
 }

@@ -7,6 +7,7 @@ import os
 import logging
 import random
 import requests
+import re
 from typing import List, Tuple
 from .dh_config import DigitalHumanConfig
 
@@ -26,6 +27,25 @@ class DeepSeekClient:
             "Authorization": f"Bearer {self.api_key}" if self.api_key else ""
         }
     
+    def _clean_text_for_tts(self, text: str) -> str:
+        """清理文本，只保留标点符号，去除其他符号"""
+        # 保留的标点符号：句号、逗号、问号、感叹号、顿号、分号、冒号
+        allowed_punctuation = '。，？！、；：'
+        
+        # 移除所有非中文、非英文、非数字、非允许标点的字符
+        # 包括：引号""''、括号()[]{}、星号*、井号#、at符号@、百分号%等
+        cleaned_text = re.sub(r'[^\u4e00-\u9fa5a-zA-Z0-9\s。，？！、；：]', '', text)
+        
+        # 清理多余的空格
+        cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
+        
+        # 记录清理前后的对比
+        if text != cleaned_text:
+            removed_chars = set(text) - set(cleaned_text)
+            logger.info(f"文本清理完成，移除符号: {removed_chars}")
+        
+        return cleaned_text
+    
     def generate_paragraph_script(self, product_info: str, paragraph_length: int = 200) -> str:
         """生成段落话术"""
         if not self.api_key:
@@ -38,8 +58,9 @@ class DeepSeekClient:
 2. 内容连贯，语言生动
 3. 包含产品介绍、优惠信息、购买引导
 4. 语气亲切自然，适合直播场景
-5. 不要使用标点符号分段，让语音更连贯
-6. 直接返回话术内容，不要其他说明
+5. 只使用基本标点符号（句号、逗号、问号、感叹号），不要使用其他符号
+6. 不要使用引号、括号、星号、井号等特殊符号
+7. 直接返回话术内容，不要其他说明
 
 产品信息：{product_info}
 """
@@ -63,10 +84,12 @@ class DeepSeekClient:
             if response.status_code == 200:
                 result = response.json()
                 content = result['choices'][0]['message']['content'].strip()
-                # 清理可能的引号和多余空格
-                content = content.replace('"', '').replace("'", '').strip()
-                logger.info(f"DeepSeek生成段落话术成功，长度: {len(content)}字符")
-                return content
+                
+                # 使用专门的TTS文本清理函数
+                cleaned_content = self._clean_text_for_tts(content)
+                
+                logger.info(f"DeepSeek生成段落话术成功，原始长度: {len(content)}字符，清理后长度: {len(cleaned_content)}字符")
+                return cleaned_content
             else:
                 logger.error(f"DeepSeek API请求失败: {response.status_code}")
                 return self._get_fallback_paragraph(product_info)
@@ -78,15 +101,19 @@ class DeepSeekClient:
     def _get_fallback_paragraph(self, product_info: str) -> str:
         """备用段落话术"""
         fallback_paragraphs = [
-            f"宝宝们{product_info}超值优惠来啦现在下单立享折扣优惠这个价格真的太划算了数量有限先到先得喜欢的宝子赶紧点击小黄车下单吧错过就没有了这么好的机会不要犹豫了立刻抢购",
-            f"各位宝宝注意了{product_info}限时特价活动开始了原价要几十块现在只要这个价格真的是白菜价了质量绝对保证大家放心购买点击右下角小黄车立刻下单享受优惠价格",
-            f"宝宝们看过来{product_info}今天特别优惠活动这个产品平时很难买到今天给大家争取到了最低价格机会难得数量真的不多了喜欢的宝子抓紧时间下单不要错过这个好机会",
-            f"亲爱的宝宝们{product_info}超级划算的价格来了这个质量这个价格真的找不到第二家了现在下单还有额外优惠赠品相送点击小黄车马上抢购库存不多售完即止",
-            f"宝子们{product_info}爆款推荐这个产品销量超高好评如潮现在活动价格真的太优惠了平时买不到这个价格今天给大家最大的优惠力度赶紧下单抢购吧"
+            f"宝宝们，{product_info}超值优惠来啦！现在下单立享折扣优惠，这个价格真的太划算了。数量有限，先到先得，喜欢的宝子赶紧点击小黄车下单吧。错过就没有了，这么好的机会不要犹豫了，立刻抢购！",
+            f"各位宝宝注意了，{product_info}限时特价活动开始了！原价要几十块，现在只要这个价格，真的是白菜价了。质量绝对保证，大家放心购买，点击右下角小黄车立刻下单享受优惠价格。",
+            f"宝宝们看过来，{product_info}今天特别优惠活动！这个产品平时很难买到，今天给大家争取到了最低价格。机会难得，数量真的不多了，喜欢的宝子抓紧时间下单，不要错过这个好机会。",
+            f"亲爱的宝宝们，{product_info}超级划算的价格来了！这个质量这个价格真的找不到第二家了。现在下单还有额外优惠，赠品相送，点击小黄车马上抢购，库存不多售完即止。",
+            f"宝子们，{product_info}爆款推荐！这个产品销量超高，好评如潮，现在活动价格真的太优惠了。平时买不到这个价格，今天给大家最大的优惠力度，赶紧下单抢购吧！"
         ]
         selected = random.choice(fallback_paragraphs)
-        logger.info(f"使用备用段落话术，长度: {len(selected)}字符")
-        return selected
+        
+        # 对备用话术也进行TTS清理
+        cleaned_selected = self._clean_text_for_tts(selected)
+        
+        logger.info(f"使用备用段落话术，原始长度: {len(selected)}字符，清理后长度: {len(cleaned_selected)}字符")
+        return cleaned_selected
 
 class ActionManager:
     """智能动作管理器"""
